@@ -1,0 +1,14 @@
+[
+  {
+    "intent": "order",
+    "content": "Khi khách muốn đặt hàng: hỏi tên, SĐT, địa chỉ, sản phẩm cần mua và số lượng. Xác nhận lại đơn hàng trước khi kết thúc."
+  },
+  {
+    "intent": "price",
+    "content": "Báo giá rõ ràng theo đơn vị (chai/túi/hộp). Nếu có nhiều dung tích, liệt kê đầy đủ. Gợi ý mua combo nếu phù hợp."
+  },
+  {
+    "intent": "product",
+    "content": "Giới thiệu tối đa 3 sản phẩm phù hợp nhất. Hỏi thêm nhu cầu cụ thể để tư vấn đúng (dùng cho ai, mục đích gì, ngân sách)."
+  }
+]

@@ -1,0 +1,164 @@
+[
+  {
+    "id": "nuoc-giat-xa",
+    "name": "Nước giặt xả",
+    "keywords": [
+      "nước giặt",
+      "giặt",
+      "giặt xả",
+      "bột giặt",
+      "giặt quần áo",
+      "giặt đồ"
+    ]
+  },
+  {
+    "id": "xa-vai-kho",
+    "name": "Xả vải khô",
+    "keywords": [
+      "xả vải",
+      "xả khô",
+      "làm mềm vải"
+    ]
+  },
+  {
+    "id": "nuoc-lau-san",
+    "name": "Nước lau sàn",
+    "keywords": [
+      "lau sàn",
+      "lau nhà",
+      "vệ sinh sàn",
+      "nước lau"
+    ]
+  },
+  {
+    "id": "nuoc-tay",
+    "name": "Nước tẩy",
+    "keywords": [
+      "nước tẩy",
+      "tẩy trắng",
+      "tẩy rửa",
+      "tẩy nhà vệ sinh",
+      "tẩy bồn cầu"
+    ]
+  },
+  {
+    "id": "nuoc-rua-chen",
+    "name": "Nước rửa chén",
+    "keywords": [
+      "rửa chén",
+      "rửa bát",
+      "rửa bát đĩa",
+      "nước rửa",
+      "rửa ly"
+    ]
+  },
+  {
+    "id": "khan-uot",
+    "name": "Khăn ướt",
+    "keywords": [
+      "khăn ướt",
+      "giấy ướt",
+      "khăn lau ướt",
+      "khăn vệ sinh"
+    ]
+  },
+  {
+    "id": "khan-giay-rut",
+    "name": "Khăn giấy rút",
+    "keywords": [
+      "khăn giấy",
+      "giấy ăn",
+      "tissue",
+      "khăn rút"
+    ]
+  },
+  {
+    "id": "giay-ve-sinh",
+    "name": "Giấy vệ sinh",
+    "keywords": [
+      "giấy vệ sinh",
+      "giấy toilet",
+      "giấy cuộn",
+      "giấy wc"
+    ]
+  },
+  {
+    "id": "giay-rut",
+    "name": "Giấy rút",
+    "keywords": [
+      "giấy rút",
+      "khăn rút",
+      "giấy ăn rút"
+    ]
+  },
+  {
+    "id": "khan-kho",
+    "name": "Khăn khô",
+    "keywords": [
+      "khăn khô",
+      "khăn lau khô",
+      "khăn đa năng"
+    ]
+  },
+  {
+    "id": "nest-kids",
+    "name": "Nest Kids",
+    "keywords": [
+      "nest kids",
+      "sản phẩm trẻ em",
+      "cho bé",
+      "em bé"
+    ]
+  },
+  {
+    "id": "hop-qua-yen-chung",
+    "name": "Hộp quà yến chưng",
+    "keywords": [
+      "yến chưng",
+      "hộp quà",
+      "quà tặng",
+      "yến sào",
+      "yến"
+    ]
+  },
+  {
+    "id": "hu-le-yen-chung",
+    "name": "Hũ lẻ yến chưng",
+    "keywords": [
+      "yến chưng lẻ",
+      "hũ yến",
+      "yến",
+      "yến sào"
+    ]
+  },
+  {
+    "id": "ta-dan-tre-em",
+    "name": "Tã dán trẻ em",
+    "keywords": [
+      "tã dán",
+      "bỉm dán",
+      "tã bỉm",
+      "bỉm cho bé"
+    ]
+  },
+  {
+    "id": "ta-quan-tre-em",
+    "name": "Tã quần trẻ em",
+    "keywords": [
+      "tã quần",
+      "bỉm quần",
+      "bỉm cho bé",
+      "tã trẻ em"
+    ]
+  },
+  {
+    "id": "vien-giat",
+    "name": "Viên giặt",
+    "keywords": [
+      "viên giặt",
+      "pod giặt",
+      "viên tẩy",
+      "giặt máy"
+    ]
+  }
+]

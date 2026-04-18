@@ -1,0 +1,98 @@
+[
+  {
+    "keywords": [
+      "giờ mở cửa",
+      "mấy giờ",
+      "giờ làm việc",
+      "mở cửa",
+      "đóng cửa",
+      "bao giờ mở"
+    ],
+    "answer": "Cửa hàng Bách hóa số Hasu mở cửa từ 7h30 đến 21h00 tất cả các ngày kể cả Chủ Nhật anh/chị nhé! 🕐"
+  },
+  {
+    "keywords": [
+      "địa chỉ",
+      "ở đâu",
+      "địa điểm",
+      "chỗ nào",
+      "tìm ở đâu",
+      "cửa hàng ở"
+    ],
+    "answer": "Bách hóa số Hasu tại: Khu 7, Phường Đại Phúc, TP Bắc Ninh anh/chị nhé! 📍\nAnh/Chị có thể gọi hotline 0915359896 để được hướng dẫn đường đi."
+  },
+  {
+    "keywords": [
+      "số điện thoại",
+      "hotline",
+      "liên hệ",
+      "gọi điện",
+      "phone",
+      "điện thoại"
+    ],
+    "answer": "Hotline Bách hóa số Hasu: 0915359896 📞\nGọi trong giờ làm việc 7h30-21h00 anh/chị nhé!"
+  },
+  {
+    "keywords": [
+      "đổi trả",
+      "trả hàng",
+      "đổi hàng",
+      "hoàn tiền",
+      "trả lại",
+      "đổi lại"
+    ],
+    "answer": "Bên em hỗ trợ đổi trả trong 7 ngày nếu sản phẩm bị lỗi do nhà sản xuất anh/chị nhé! 🔄\nAnh/Chị giữ lại hóa đơn và liên hệ hotline 0915359896 để được hỗ trợ."
+  },
+  {
+    "keywords": [
+      "giao hàng",
+      "ship",
+      "vận chuyển",
+      "miễn phí ship",
+      "phí ship",
+      "giao tận nơi"
+    ],
+    "answer": "Bên em giao hàng trong 2-3 ngày 🚚\nMiễn phí ship cho đơn từ 200.000đ. Đơn dưới 200k phí ship 25.000đ anh/chị nhé!"
+  },
+  {
+    "keywords": [
+      "thanh toán",
+      "trả tiền",
+      "chuyển khoản",
+      "tiền mặt",
+      "momo",
+      "zalopay",
+      "visa"
+    ],
+    "answer": "Bên em nhận thanh toán: 💳\n• Tiền mặt khi nhận hàng (COD)\n• Chuyển khoản ngân hàng\n• Ví điện tử: Momo, ZaloPay"
+  },
+  {
+    "keywords": [
+      "bảo hành",
+      "warranty",
+      "hư hỏng",
+      "lỗi sản xuất"
+    ],
+    "answer": "Sản phẩm bên em được bảo hành theo chính sách nhà sản xuất. Nếu phát hiện lỗi trong vòng 7 ngày, em đổi hàng mới miễn phí anh/chị nhé! 🛡️"
+  },
+  
+  {
+    "keywords": [
+      "đặt hàng",
+      "order",
+      "đặt trước",
+      "mua online"
+    ],
+    "answer": "Anh/Chị có thể đặt hàng ngay qua chat này! 😊\nMình cần biết:\n1. Tên và SĐT của anh/chị\n2. Sản phẩm và số lượng cần mua\n3. Địa chỉ giao hàng\nBạn cho em thông tin trên nhé!"
+  },
+  {
+    "keywords": [
+      "xin chào",
+      "hello",
+      "hi",
+      "chào",
+      "alo"
+    ],
+    "answer": "Chào anh/chị! Em là nhân viên tư vấn của Bách hóa số Hasu 👋\nMình có thể giúp anh/chị tìm sản phẩm, báo giá và nhận đặt hàng.\nBạn đang cần tìm gì hôm nay ạ? 😊"
+  }
+]

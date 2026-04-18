@@ -1,0 +1,98 @@
+[
+  {
+    "id": "km-nuoc-giat-tui-3.2kg",
+    "title": "Mua 1 túi tặng 1 túi Nước giặt Zesty Clean 3,2kg",
+    "type": "buy1get1",
+    "product": "Nước giặt xả Zesty Clean túi 3,2kg (hương Đại Dương hoặc Ngàn Hoa)",
+    "gift": "1 túi Nước giặt Zesty Clean 3,2kg (hương ngẫu nhiên)",
+    "price_original": 320000,
+    "price_sale": 160000,
+    "keywords": ["khuyến mãi", "mua 1 tặng 1", "nước giặt", "zesty clean", "túi 3.2kg", "giảm giá", "ưu đãi", "khuyến mại", "km"],
+    "active": true,
+    "note": "Hương quà tặng ngẫu nhiên"
+  },
+  {
+    "id": "km-can-giat-3.6kg",
+    "title": "Mua 1 tặng 1 Can giặt Zesty Clean 3,6kg",
+    "type": "buy1get1",
+    "product": "Nước giặt xả Zesty Clean can 3,6kg công nghệ Nhật Bản hương Đại Dương",
+    "gift": "Khăn giấy rút cao cấp Hasu 300 tờ dây 10 gói",
+    "price_original": 300000,
+    "price_sale": 184000,
+    "keywords": ["khuyến mãi", "mua 1 tặng 1", "nước giặt", "zesty clean", "can 3.6kg", "giảm giá", "ưu đãi", "khuyến mại", "km", "tặng khăn giấy"],
+    "active": true,
+    "note": "Tặng kèm khăn giấy rút cao cấp Hasu"
+  },
+   {
+    "id": "km-can-giat-3.6kg-2",
+    "title": "Mua 1 tặng 1 Can giặt Zesty Clean 3,6kg",
+    "type": "buy1get1",
+    "product": "Nước giặt xả Zesty Clean can 3,6kg công nghệ Nhật Bản hương Đại Dương",
+    "gift": "Khăn ướt Hasucare 100 tờ",
+    "price_original": 280000,
+    "price_sale": 184000,
+    "keywords": ["khuyến mãi", "mua 1 tặng 1", "nước giặt", "zesty clean", "can 3.6kg", "giảm giá", "ưu đãi", "khuyến mại", "km", "tặng khăn giấy"],
+    "active": true,
+    "note": "Tặng kèm khăn ướt Hasucare 100 tờ"
+  },
+  {
+    "id": "km-nuoc-tay-bon-cau-sutiki",
+    "title": "Combo 2 chai Nước tẩy bồn cầu Sutiki 750ml",
+    "type": "combo",
+    "product": "2 chai Nước tẩy bồn cầu và nhà tắm Sutiki 750ml (1 xanh + 1 đen)",
+    "gift": null,
+    "price_original": 66000,
+    "price_sale": 33000,
+    "keywords": ["khuyến mãi", "combo", "nước tẩy", "sutiki", "bồn cầu", "nhà tắm", "750ml", "giảm giá", "ưu đãi", "khuyến mại", "km", "tẩy bồn cầu"],
+    "active": true,
+    "note": "Combo 2 chai tiết kiệm 7.500đ so với mua lẻ"
+  },
+  {
+    "id": "km-giay-rut-day-1280to",
+    "title": "Mua 2 tặng 2 Giấy rút đáy Hasu 1280 tờ",
+    "type": "buy2get2",
+    "product": "Khăn giấy rút đa năng cao cấp Hasu 1280 tờ 4 lớp",
+    "gift": "2 hộp Giấy rút đáy Hasu 1280 tờ (cùng loại)",
+    "price_original": 144000,
+    "price_sale": 72000,
+    "keywords": ["khuyến mãi", "mua 2 tặng 2", "giấy rút", "hasu", "1280 tờ", "khăn giấy", "giảm giá", "ưu đãi", "khuyến mại", "km", "tissue"],
+    "active": true,
+    "note": "Mua 2 hộp tặng thêm 2 hộp cùng loại"
+  },
+  {
+    "id": "km-bim-quan-oubiroi",
+    "title": "Mua 1 tặng 1 Bỉm quần Oubiroi",
+    "type": "buy1get1",
+    "product": "Tã quần Oubiroi Cloudsoft Sanctuar size 3XL 44 miếng (từ 18kg)",
+    "gift": "1 gói Bỉm quần Oubiroi cùng size",
+    "price_original": 600000,
+    "price_sale": 299000,
+    "keywords": ["khuyến mãi", "mua 1 tặng 1", "bỉm", "tã quần", "oubiroi", "3XL", "cho bé", "trẻ em", "giảm giá", "ưu đãi", "khuyến mại", "km"],
+    "active": true,
+    "note": "Size 3XL dành cho bé từ 18kg trở lên"
+  },
+  {
+    "id": "km-khan-giay-rut-hasu-bich",
+    "title": "Mua 1 bịch tặng 1 bịch Khăn giấy rút Hasu",
+    "type": "buy1get1",
+    "product": "Khăn giấy rút cao cấp Hasumart bịch 10 gói 300 tờ",
+    "gift": "1 bịch Khăn giấy rút cao cấp Hasu 300 tờ dây 10 gói",
+    "price_original": 110000,
+    "price_sale": 55000,
+    "keywords": ["khuyến mãi", "mua 1 tặng 1", "khăn giấy", "giấy rút", "hasu", "hasumart", "300 tờ", "bịch 10 gói", "giảm giá", "ưu đãi", "khuyến mại", "km"],
+    "active": true,
+    "note": "Mua 1 bịch tặng 1 bịch cùng loại"
+  },
+  {
+    "id": "km-nuoc-lau-san-sutiki-1.8kg",
+    "title": "Mua 1 tặng 1 Nước lau sàn Sutiki 1,8kg",
+    "type": "buy1get1",
+    "product": "Nước lau sàn Sutiki 1,8kg hương Thanh Trúc",
+    "gift": "1 chai Nước lau sàn Sutiki 1,8kg (hương ngẫu nhiên)",
+    "price_original": 130000,
+    "price_sale": 65000,
+    "keywords": ["khuyến mãi", "mua 1 tặng 1", "nước lau sàn", "sutiki", "1.8kg", "lau nhà", "lau sàn", "giảm giá", "ưu đãi", "khuyến mại", "km"],
+    "active": true,
+    "note": "Hương quà tặng có thể là Hoa Lily hoặc hương khác"
+  }
+]
