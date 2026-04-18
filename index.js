@@ -6,8 +6,6 @@
 // ══════════════════════════════════════════════════════════════
 
 require('dotenv').config();
-// Thêm vào đầu index.js — sau require dotenv
-const tokenManager = require('./token-manager');
 const express = require('express');
 const axios   = require('axios');
 const app     = express();
@@ -300,34 +298,26 @@ async function callClaude(userId, additionalContext = '') {
 // ══════════════════════════════════════════════════════════════
 // GỬI TIN NHẮN QUA ZALO API v3
 // ══════════════════════════════════════════════════════════════
-async function sendZaloMessage(userId, text, isRetry = false) {
+async function sendZaloMessage(userId, text) {
   try {
     const res = await axios.post(
       'https://openapi.zalo.me/v3.0/oa/message/cs',
       { recipient: { user_id: userId }, message: { text } },
-      { headers: {
-          'access_token': tokenManager.getAccessToken(), // ← dùng manager
+      {
+        headers: {
+          'access_token': process.env.ZALO_ACCESS_TOKEN,
           'Content-Type': 'application/json'
-      }}
+        }
+      }
     );
-
-    // Zalo trả về lỗi -216 hoặc -124 khi token hết hạn
-    const errCode = res.data?.error;
-    if ((errCode === -216 || errCode === -124) && !isRetry) {
-      console.log('[Token] Token hết hạn, tự refresh...');
-      await tokenManager.refreshAccessToken();
-      return sendZaloMessage(userId, text, true); // retry 1 lần
-    }
     console.log('Zalo OK:', JSON.stringify(res.data));
-
   } catch (err) {
     console.error('Zalo lỗi:', err.message);
+    console.error('Chi tiết:', JSON.stringify(err.response?.data));
   }
 }
 
 
-// Khởi động auto-refresh ngay khi server start
-tokenManager.startAutoRefresh();
 // ── KHỞI ĐỘNG ─────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server chạy tại cổng ${PORT}`));
