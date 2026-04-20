@@ -22,6 +22,10 @@ const policies   = require('./data/policies.json');
 // ── LỊCH SỬ HỘI THOẠI ────────────────────────────────────────
 const histories = {};
 
+// ── ZALO TOKEN (in-memory, được refresh tự động) ─────────────
+let zaloAccessToken  = process.env.ZALO_ACCESS_TOKEN  || '';
+let zaloRefreshToken = process.env.ZALO_REFRESH_TOKEN || '';
+
 // ── BASE PROMPT — Ngắn, không chứa data sản phẩm ─────────────
 const BASE_PROMPT = `Anh/Chị là nhân viên tư vấn của Bách hóa số Hasu tại Bắc Ninh.
 
@@ -181,6 +185,107 @@ function buildPolicyContext(intent) {
 }
 
 // ══════════════════════════════════════════════════════════════
+// ZALO TOKEN MANAGEMENT
+// ══════════════════════════════════════════════════════════════
+
+async function refreshZaloToken() {
+  if (!zaloRefreshToken) {
+    console.warn('[Token] Chưa có ZALO_REFRESH_TOKEN — bỏ qua refresh');
+    return false;
+  }
+  if (!process.env.ZALO_APP_ID || !process.env.ZALO_APP_SECRET) {
+    console.warn('[Token] Thiếu ZALO_APP_ID hoặc ZALO_APP_SECRET — bỏ qua refresh');
+    return false;
+  }
+
+  try {
+    console.log('[Token] Đang refresh Zalo access token...');
+    const params = new URLSearchParams();
+    params.append('grant_type',    'refresh_token');
+    params.append('refresh_token', zaloRefreshToken);
+    params.append('app_id',        process.env.ZALO_APP_ID);
+
+    const res = await axios.post(
+      'https://oauth.zaloapp.com/v4/oa/access_token',
+      params.toString(),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'secret_key':   process.env.ZALO_APP_SECRET
+        }
+      }
+    );
+
+    if (res.data.access_token) {
+      zaloAccessToken  = res.data.access_token;
+      zaloRefreshToken = res.data.refresh_token || zaloRefreshToken;
+      console.log('[Token] Refresh thành công! Token mới có hiệu lực.');
+      // Cập nhật refresh token mới nhất lên Railway để không mất khi restart
+      await updateRailwayEnvToken(zaloRefreshToken);
+      return true;
+    }
+
+    console.error('[Token] Refresh thất bại — phản hồi:', JSON.stringify(res.data));
+    return false;
+  } catch (err) {
+    console.error('[Token] Lỗi khi refresh:', err.message);
+    if (err.response) {
+      console.error('[Token] Chi tiết lỗi:', JSON.stringify(err.response.data));
+    }
+    return false;
+  }
+}
+
+// Cập nhật ZALO_REFRESH_TOKEN lên Railway env để tồn tại qua restart
+async function updateRailwayEnvToken(newRefreshToken) {
+  const apiToken     = process.env.RAILWAY_API_TOKEN;
+  const projectId    = process.env.RAILWAY_PROJECT_ID;
+  const serviceId    = process.env.RAILWAY_SERVICE_ID;
+  const environmentId = process.env.RAILWAY_ENVIRONMENT_ID;
+
+  if (!apiToken || !projectId || !serviceId || !environmentId) {
+    console.log('[Railway] Bỏ qua cập nhật Railway env (thiếu RAILWAY_* config)');
+    return;
+  }
+
+  try {
+    const res = await axios.post(
+      'https://backboard.railway.app/graphql/v2',
+      {
+        query: `
+          mutation variableUpsert($input: VariableUpsertInput!) {
+            variableUpsert(input: $input)
+          }
+        `,
+        variables: {
+          input: {
+            projectId,
+            environmentId,
+            serviceId,
+            name:  'ZALO_REFRESH_TOKEN',
+            value: newRefreshToken
+          }
+        }
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${apiToken}`,
+          'Content-Type':  'application/json'
+        }
+      }
+    );
+
+    if (res.data.errors) {
+      console.error('[Railway] Lỗi GraphQL:', JSON.stringify(res.data.errors));
+    } else {
+      console.log('[Railway] Đã cập nhật ZALO_REFRESH_TOKEN thành công.');
+    }
+  } catch (err) {
+    console.error('[Railway] Lỗi cập nhật env:', err.message);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
 // ROUTES
 // ══════════════════════════════════════════════════════════════
 
@@ -224,16 +329,16 @@ app.post('/webhook', async (req, res) => {
   }
 
   // Kiểm tra khuyến mãi
-const promos = findPromotion(message);
-if (promos && promos.length > 0) {
-  const promoText = promos.map(p =>
-    `🎁 ${p.title}\n💰 Giá: ${p.price_sale.toLocaleString('vi-VN')}đ` +
-    (p.gift ? `\n🎀 Quà tặng: ${p.gift}` : '') +
-    (p.note ? `\n📌 ${p.note}` : '')
-  ).join('\n\n');
-  await sendZaloMessage(userId, `Ưu đãi đang có tại Hasu:\n\n${promoText}\n\nBạn muốn đặt hàng không ạ? 😊`);
-  return;
-}
+  const promos = findPromotion(message);
+  if (promos && promos.length > 0) {
+    const promoText = promos.map(p =>
+      `🎁 ${p.title}\n💰 Giá: ${p.price_sale.toLocaleString('vi-VN')}đ` +
+      (p.gift ? `\n🎀 Quà tặng: ${p.gift}` : '') +
+      (p.note ? `\n📌 ${p.note}` : '')
+    ).join('\n\n');
+    await sendZaloMessage(userId, `Ưu đãi đang có tại Hasu:\n\n${promoText}\n\nBạn muốn đặt hàng không ạ? 😊`);
+    return;
+  }
 
   // LỚP 2: Phát hiện intent
   const intent = detectIntent(message);
@@ -300,26 +405,57 @@ async function callClaude(userId, additionalContext = '') {
 // GỬI TIN NHẮN QUA ZALO API v3
 // ══════════════════════════════════════════════════════════════
 async function sendZaloMessage(userId, text) {
-  try {
-    const res = await axios.post(
-      'https://openapi.zalo.me/v3.0/oa/message/cs',
-      { recipient: { user_id: userId }, message: { text } },
-      {
-        headers: {
-          'access_token': process.env.ZALO_ACCESS_TOKEN,
-          'Content-Type': 'application/json'
-        }
+  const doSend = (token) => axios.post(
+    'https://openapi.zalo.me/v3.0/oa/message/cs',
+    { recipient: { user_id: userId }, message: { text } },
+    {
+      headers: {
+        'access_token': token,
+        'Content-Type': 'application/json'
       }
-    );
+    }
+  );
+
+  try {
+    const res = await doSend(zaloAccessToken);
     console.log('Zalo OK:', JSON.stringify(res.data));
   } catch (err) {
-    console.error('Zalo lỗi:', err.message);
-    console.error('Chi tiết:', JSON.stringify(err.response?.data));
+    const errCode = err.response?.data?.error;
+    const httpStatus = err.response?.status;
+
+    // Token hết hạn (Zalo trả error -216 hoặc HTTP 401)
+    if (errCode === -216 || httpStatus === 401) {
+      console.warn('[Token] Access token hết hạn — đang tự động refresh...');
+      const ok = await refreshZaloToken();
+      if (ok) {
+        try {
+          const res2 = await doSend(zaloAccessToken);
+          console.log('Zalo OK (sau refresh):', JSON.stringify(res2.data));
+        } catch (err2) {
+          console.error('Zalo lỗi sau khi refresh:', err2.message);
+          console.error('Chi tiết:', JSON.stringify(err2.response?.data));
+        }
+      } else {
+        console.error('[Token] Refresh thất bại — không thể gửi tin nhắn.');
+      }
+    } else {
+      console.error('Zalo lỗi:', err.message);
+      console.error('Chi tiết:', JSON.stringify(err.response?.data));
+    }
   }
 }
 
-
-// ── KHỞI ĐỘNG ─────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+// KHỞI ĐỘNG SERVER + AUTO-REFRESH TOKEN
+// ══════════════════════════════════════════════════════════════
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server chạy tại cổng ${PORT}`));
+app.listen(PORT, async () => {
+  console.log(`Server chạy tại cổng ${PORT}`);
 
+  // Lấy access token mới ngay khi khởi động (tránh dùng token cũ từ .env)
+  await refreshZaloToken();
+
+  // Tự động refresh mỗi 20 giờ (access token hết hạn sau 24h)
+  setInterval(refreshZaloToken, 20 * 60 * 60 * 1000);
+  console.log('[Token] Lịch refresh: mỗi 20 giờ.');
+});
