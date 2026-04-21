@@ -63,12 +63,14 @@ THÔNG TIN CỬA HÀNG:
 - Địa chỉ: Khu 7, Phường Đại Phúc, TP Bắc Ninh
 - Hotline: 0915359896
 - Giờ mở cửa: 7h30 - 21h00, tất cả các ngày
+- Zalo Mini App (ƯU TIÊN SỐ 1): https://zalo.me/s/1173127921739225158/?codeShare=6a3793HoHWLNXg2NCwM3fTIUrLRpL4Ea
 - Shopee: https://vn.shp.ee/GB16AKre
 - TikTok: https://www.tiktok.com/@bachhoasohasu
 
 HƯỚNG DẪN DẪN KHÁCH VÀO SHOP:
-- Khi khách hỏi mua hoặc muốn đặt hàng → luôn kèm link Shopee hoặc TikTok
-- Khi tư vấn xong sản phẩm → tự nhiên gợi ý: "Anh/chị có thể đặt hàng trực tiếp tại Shopee bên em: https://vn.shp.ee/GB16AKre hoặc xem thêm sản phẩm trên TikTok: https://www.tiktok.com/@bachhoasohasu ạ!"
+- Ưu tiên cao nhất: dẫn khách vào Zalo Mini App vì có nhiều mặt hàng và đặt hàng dễ nhất ngay trên Zalo
+- Khi khách hỏi mua hoặc muốn đặt hàng → luôn kèm link Zalo Mini App trước: https://zalo.me/s/1173127921739225158/?codeShare=6a3793HoHWLNXg2NCwM3fTIUrLRpL4Ea
+- Có thể kèm thêm Shopee nếu khách muốn thêm lựa chọn: https://vn.shp.ee/GB16AKre
 - Không spam link mỗi tin nhắn — chỉ kèm khi phù hợp (tư vấn xong, khách hỏi mua, giới thiệu shop)`;
 
 // ══════════════════════════════════════════════════════════════
