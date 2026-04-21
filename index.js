@@ -60,7 +60,14 @@ QUY TẮC:
 THÔNG TIN CỬA HÀNG:
 - Địa chỉ: Khu 7, Phường Đại Phúc, TP Bắc Ninh
 - Hotline: 0915359896
-- Giờ mở cửa: 7h30 - 21h00, tất cả các ngày`;
+- Giờ mở cửa: 7h30 - 21h00, tất cả các ngày
+- Shopee: https://vn.shp.ee/GB16AKre
+- TikTok: https://www.tiktok.com/@bachhoasohasu
+
+HƯỚNG DẪN DẪN KHÁCH VÀO SHOP:
+- Khi khách hỏi mua hoặc muốn đặt hàng → luôn kèm link Shopee hoặc TikTok
+- Khi tư vấn xong sản phẩm → tự nhiên gợi ý: "Anh/chị có thể đặt hàng trực tiếp tại Shopee bên em: https://vn.shp.ee/GB16AKre hoặc xem thêm sản phẩm trên TikTok: https://www.tiktok.com/@bachhoasohasu ạ!"
+- Không spam link mỗi tin nhắn — chỉ kèm khi phù hợp (tư vấn xong, khách hỏi mua, giới thiệu shop)`;
 
 // ══════════════════════════════════════════════════════════════
 // GOOGLE SHEETS — LOAD DATA
@@ -106,8 +113,8 @@ async function loadDataFromSheets() {
     // Hàng 1: ghi chú | Hàng 2: header | Hàng 3+: data
     // → lấy từ hàng 2, bỏ phần tử đầu (header)
 
-    // ── San pham (14 cột A→N) ──────────────────────────────
-    const spRows = await getSheetValues(sheets, 'San pham!A2:N');
+    // ── San pham (15 cột A→O) ──────────────────────────────
+    const spRows = await getSheetValues(sheets, 'San pham!A2:O');
     if (spRows.length > 1) {
       const [, ...data] = spRows;
       products = data
@@ -125,7 +132,8 @@ async function loadDataFromSheets() {
           keywords:     parseArr(r[10]),
           description:  r[11] || '',
           inStock:      String(r[12] || 'TRUE').toUpperCase() !== 'FALSE',
-          tags:         parseArr(r[13])
+          tags:         parseArr(r[13]),
+          link:         r[14] || ''
         }))
         .filter(p => p.name);
     }
@@ -139,8 +147,8 @@ async function loadDataFromSheets() {
         .filter(f => f.answer);
     }
 
-    // ── Khuyen mai (10 cột A→J) ───────────────────────────
-    const kmRows = await getSheetValues(sheets, 'Khuyen mai!A2:J');
+    // ── Khuyen mai (11 cột A→K) ───────────────────────────
+    const kmRows = await getSheetValues(sheets, 'Khuyen mai!A2:K');
     if (kmRows.length > 1) {
       const [, ...data] = kmRows;
       promotions = data
@@ -154,7 +162,8 @@ async function loadDataFromSheets() {
           price_sale:     Number(r[6]) || 0,
           keywords:       parseArr(r[7]),
           active:         String(r[8] || 'TRUE').toUpperCase() !== 'FALSE',
-          note:           r[9] || ''
+          note:           r[9] || '',
+          link:           r[10] || ''
         }))
         .filter(p => p.title);
     }
@@ -304,6 +313,7 @@ function buildProductContext(related) {
     if (p.description) line += ` — ${p.description}`;
     if (p.inStock === false) line += ' [HẾT HÀNG]';
     if (p.variants?.length > 1) line += ` (có: ${p.variants.join(', ')})`;
+    if (p.link) line += ` | 🛒 ${p.link}`;
     return line;
   }).join('\n');
   return `\n\nSản phẩm liên quan:\n${list}`;
@@ -517,7 +527,8 @@ app.post('/webhook', async (req, res) => {
     const promoText = promos.map(p =>
       `🎁 ${p.title}\n💰 Giá: ${p.price_sale.toLocaleString('vi-VN')}đ` +
       (p.gift ? `\n🎀 Quà tặng: ${p.gift}` : '') +
-      (p.note ? `\n📌 ${p.note}` : '')
+      (p.note ? `\n📌 ${p.note}` : '') +
+      (p.link ? `\n🛒 Đặt ngay: ${p.link}` : '')
     ).join('\n\n');
     await sendZaloMessage(userId, `Ưu đãi đang có tại Hasu:\n\n${promoText}\n\nBạn muốn đặt hàng không ạ? 😊`);
     return;
