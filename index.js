@@ -188,6 +188,34 @@ function buildPolicyContext(intent) {
 // ZALO TOKEN MANAGEMENT
 // ══════════════════════════════════════════════════════════════
 
+// Kiểm tra access_token hiện tại còn sống không
+// → tránh tiêu thụ refresh_token khi không cần thiết
+async function checkAccessToken() {
+  if (!zaloAccessToken) return false;
+  try {
+    const res = await axios.get('https://openapi.zalo.me/v2.0/oa/getoa', {
+      headers: { 'access_token': zaloAccessToken }
+    });
+    const valid = res.data?.error === 0;
+    console.log('[Token] Kiểm tra access_token:', valid ? '✅ Còn hiệu lực' : `❌ Hết hạn (error ${res.data?.error})`);
+    return valid;
+  } catch (err) {
+    console.log('[Token] Kiểm tra access_token: ❌ Lỗi —', err.message);
+    return false;
+  }
+}
+
+// Khởi động: chỉ refresh nếu access_token thực sự hết hạn
+async function initToken() {
+  const stillValid = await checkAccessToken();
+  if (stillValid) {
+    console.log('[Token] Access token còn hiệu lực — giữ nguyên, không tiêu thụ refresh_token.');
+    return;
+  }
+  console.log('[Token] Access token hết hạn — tiến hành refresh...');
+  await refreshZaloToken();
+}
+
 async function refreshZaloToken() {
   if (!zaloRefreshToken) {
     console.warn('[Token] Chưa có ZALO_REFRESH_TOKEN — bỏ qua refresh');
@@ -511,10 +539,16 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`Server chạy tại cổng ${PORT}`);
 
-  // Lấy access token mới ngay khi khởi động (tránh dùng token cũ từ .env)
-  await refreshZaloToken();
+  // Kiểm tra token trước — chỉ refresh nếu thực sự hết hạn
+  // Tránh tiêu thụ refresh_token không cần thiết mỗi lần restart
+  await initToken();
 
-  // Tự động refresh mỗi 20 giờ (access token hết hạn sau 24h)
-  setInterval(refreshZaloToken, 20 * 60 * 60 * 1000);
-  console.log('[Token] Lịch refresh: mỗi 20 giờ.');
+  // Lên lịch kiểm tra và refresh mỗi 20 giờ
+  setInterval(async () => {
+    const stillValid = await checkAccessToken();
+    if (!stillValid) await refreshZaloToken();
+    else console.log('[Token] Định kỳ 20h: token còn tốt, bỏ qua refresh.');
+  }, 20 * 60 * 60 * 1000);
+
+  console.log('[Token] Lịch kiểm tra: mỗi 20 giờ.');
 });
