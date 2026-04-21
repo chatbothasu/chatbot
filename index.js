@@ -219,8 +219,16 @@ async function refreshZaloToken() {
     if (res.data.access_token) {
       zaloAccessToken  = res.data.access_token;
       zaloRefreshToken = res.data.refresh_token || zaloRefreshToken;
-      console.log('[Token] Refresh thành công! Token mới có hiệu lực.');
-      // Cập nhật refresh token mới nhất lên Railway để không mất khi restart
+
+      // In rõ token mới ra log để dễ copy khi cần
+      console.log('════════════════════════════════════════');
+      console.log('[Token] ✅ REFRESH THÀNH CÔNG!');
+      console.log('[Token] ACCESS_TOKEN  mới:', zaloAccessToken);
+      console.log('[Token] REFRESH_TOKEN mới:', zaloRefreshToken);
+      console.log('[Token] Hãy copy 2 giá trị trên vào Railway env nếu cần!');
+      console.log('════════════════════════════════════════');
+
+      // Cập nhật lên Railway env nếu có config
       await updateRailwayEnvToken(zaloRefreshToken);
       return true;
     }
@@ -290,6 +298,57 @@ async function updateRailwayEnvToken(newRefreshToken) {
 // ══════════════════════════════════════════════════════════════
 
 app.get('/', (req, res) => res.sendStatus(200));
+
+// ── ADMIN: Kiểm tra trạng thái token ──────────────────────────
+// GET /admin/token-status?secret=<ADMIN_SECRET>
+app.get('/admin/token-status', (req, res) => {
+  const secret = process.env.ADMIN_SECRET || 'hasu2024';
+  if (req.query.secret !== secret) return res.status(403).json({ error: 'Forbidden' });
+
+  res.json({
+    access_token_length:  zaloAccessToken.length,
+    refresh_token_length: zaloRefreshToken.length,
+    access_token_preview: zaloAccessToken.slice(0, 20) + '...',
+    refresh_token_preview: zaloRefreshToken.slice(0, 20) + '...',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// ── ADMIN: Cập nhật token thủ công không cần redeploy ─────────
+// POST /admin/set-token?secret=<ADMIN_SECRET>
+// Body: { "access_token": "...", "refresh_token": "..." }
+app.post('/admin/set-token', (req, res) => {
+  const secret = process.env.ADMIN_SECRET || 'hasu2024';
+  if (req.query.secret !== secret) return res.status(403).json({ error: 'Forbidden' });
+
+  const { access_token, refresh_token } = req.body;
+  if (!access_token && !refresh_token) {
+    return res.status(400).json({ error: 'Cần ít nhất access_token hoặc refresh_token' });
+  }
+
+  if (access_token)  { zaloAccessToken  = access_token;  }
+  if (refresh_token) { zaloRefreshToken = refresh_token; }
+
+  console.log('[Admin] Token đã được cập nhật thủ công.');
+  console.log('[Admin] ACCESS_TOKEN  mới:', zaloAccessToken.slice(0, 30) + '...');
+  console.log('[Admin] REFRESH_TOKEN mới:', zaloRefreshToken.slice(0, 30) + '...');
+
+  res.json({ success: true, message: 'Token đã cập nhật thành công!' });
+});
+
+// ── ADMIN: Trigger refresh thủ công ───────────────────────────
+// GET /admin/refresh-now?secret=<ADMIN_SECRET>
+app.get('/admin/refresh-now', async (req, res) => {
+  const secret = process.env.ADMIN_SECRET || 'hasu2024';
+  if (req.query.secret !== secret) return res.status(403).json({ error: 'Forbidden' });
+
+  const ok = await refreshZaloToken();
+  if (ok) {
+    res.json({ success: true, message: 'Refresh thành công! Xem log để lấy token mới.' });
+  } else {
+    res.json({ success: false, message: 'Refresh thất bại. Xem log để biết chi tiết.' });
+  }
+});
 
 // Thay bằng mã xác thực domain Zalo của anh/chị
 app.get('/zalo_verifierNSAS0jpJA3iEtwmmZT0-A7djgp-LctvYCJCt.html', (req, res) => {
