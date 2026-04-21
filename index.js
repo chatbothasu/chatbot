@@ -6,18 +6,20 @@
 // ══════════════════════════════════════════════════════════════
 
 require('dotenv').config();
-const express = require('express');
-const axios   = require('axios');
-const app     = express();
+const express    = require('express');
+const axios      = require('axios');
+const { google } = require('googleapis');
+const app        = express();
 app.use(express.json());
 app.use(express.static('public'));
-const promotions = require('./data/promotions.json');
 
-// ── LOAD DATA ─────────────────────────────────────────────────
-const products   = require('./data/products.json');
-const faqs       = require('./data/faq.json');
-const categories = require('./data/categories.json');
-const policies   = require('./data/policies.json');
+// ── DỮ LIỆU IN-MEMORY (đọc từ Google Sheets, fallback JSON) ──
+let products   = [];
+let faqs       = [];
+let promotions = [];
+let categories = [];
+let policies   = [];
+let lastLoaded = null;   // thời điểm load cuối
 
 // ── LỊCH SỬ HỘI THOẠI ────────────────────────────────────────
 const histories = {};
@@ -26,7 +28,7 @@ const histories = {};
 let zaloAccessToken  = process.env.ZALO_ACCESS_TOKEN  || '';
 let zaloRefreshToken = process.env.ZALO_REFRESH_TOKEN || '';
 
-// ── BASE PROMPT — Ngắn, không chứa data sản phẩm ─────────────
+// ── BASE PROMPT ───────────────────────────────────────────────
 const BASE_PROMPT = `Anh/Chị là nhân viên tư vấn của Bách hóa số Hasu tại Bắc Ninh.
 
 VAI TRÒ: Tư vấn sản phẩm, nhận đặt hàng, hỗ trợ khiếu nại.
@@ -61,10 +63,157 @@ THÔNG TIN CỬA HÀNG:
 - Giờ mở cửa: 7h30 - 21h00, tất cả các ngày`;
 
 // ══════════════════════════════════════════════════════════════
+// GOOGLE SHEETS — LOAD DATA
+// ══════════════════════════════════════════════════════════════
+
+function getGoogleAuth() {
+  const b64 = process.env.GOOGLE_SERVICE_ACCOUNT_B64;
+  if (!b64) throw new Error('Thiếu GOOGLE_SERVICE_ACCOUNT_B64 trong env');
+  const creds = JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));
+  return new google.auth.GoogleAuth({
+    credentials: creds,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
+  });
+}
+
+// Đọc một vùng dữ liệu từ Sheet
+async function getSheetValues(sheets, range) {
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: process.env.GOOGLE_SHEET_ID,
+    range
+  });
+  return res.data.values || [];
+}
+
+// Chuỗi "a, b, c" → ['a','b','c']
+function parseArr(val) {
+  if (!val || String(val).trim() === '') return [];
+  return String(val).split(',').map(s => s.trim()).filter(Boolean);
+}
+
+// Load toàn bộ data từ Google Sheets
+async function loadDataFromSheets() {
+  if (!process.env.GOOGLE_SHEET_ID || !process.env.GOOGLE_SERVICE_ACCOUNT_B64) {
+    console.warn('[Sheets] Thiếu GOOGLE_SHEET_ID hoặc GOOGLE_SERVICE_ACCOUNT_B64');
+    return false;
+  }
+
+  try {
+    console.log('[Sheets] Đang tải data từ Google Sheets...');
+    const auth   = getGoogleAuth();
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    // Hàng 1: ghi chú | Hàng 2: header | Hàng 3+: data
+    // → lấy từ hàng 2, bỏ phần tử đầu (header)
+
+    // ── San pham (14 cột A→N) ──────────────────────────────
+    const spRows = await getSheetValues(sheets, 'San pham!A2:N');
+    if (spRows.length > 1) {
+      const [, ...data] = spRows;
+      products = data
+        .map(r => ({
+          id:           r[0]  || '',
+          name:         r[1]  || '',
+          brand:        r[2]  || '',
+          ma_sp:        r[3]  || '',
+          price:        Number(r[4])  || 0,
+          unit:         r[5]  || '',
+          size:         r[6]  || '',
+          quy_cach:     r[7]  || '',
+          category:     r[8]  || '',
+          categoryName: r[9]  || '',
+          keywords:     parseArr(r[10]),
+          description:  r[11] || '',
+          inStock:      String(r[12] || 'TRUE').toUpperCase() !== 'FALSE',
+          tags:         parseArr(r[13])
+        }))
+        .filter(p => p.name);
+    }
+
+    // ── FAQ (2 cột A→B) ───────────────────────────────────
+    const faqRows = await getSheetValues(sheets, 'FAQ!A2:B');
+    if (faqRows.length > 1) {
+      const [, ...data] = faqRows;
+      faqs = data
+        .map(r => ({ keywords: parseArr(r[0]), answer: r[1] || '' }))
+        .filter(f => f.answer);
+    }
+
+    // ── Khuyen mai (10 cột A→J) ───────────────────────────
+    const kmRows = await getSheetValues(sheets, 'Khuyen mai!A2:J');
+    if (kmRows.length > 1) {
+      const [, ...data] = kmRows;
+      promotions = data
+        .map(r => ({
+          id:             r[0] || '',
+          title:          r[1] || '',
+          type:           r[2] || '',
+          product:        r[3] || '',
+          gift:           r[4] || '',
+          price_original: Number(r[5]) || 0,
+          price_sale:     Number(r[6]) || 0,
+          keywords:       parseArr(r[7]),
+          active:         String(r[8] || 'TRUE').toUpperCase() !== 'FALSE',
+          note:           r[9] || ''
+        }))
+        .filter(p => p.title);
+    }
+
+    // ── Danh muc (3 cột A→C) ──────────────────────────────
+    const dmRows = await getSheetValues(sheets, 'Danh muc!A2:C');
+    if (dmRows.length > 1) {
+      const [, ...data] = dmRows;
+      categories = data
+        .map(r => ({ id: r[0] || '', name: r[1] || '', keywords: parseArr(r[2]) }))
+        .filter(c => c.id);
+    }
+
+    // ── Chinh sach (2 cột A→B) ────────────────────────────
+    const csRows = await getSheetValues(sheets, 'Chinh sach!A2:B');
+    if (csRows.length > 1) {
+      const [, ...data] = csRows;
+      policies = data
+        .map(r => ({ intent: r[0] || '', content: r[1] || '' }))
+        .filter(p => p.intent);
+    }
+
+    lastLoaded = new Date();
+    console.log(
+      `[Sheets] ✅ Load xong — ` +
+      `${products.length} SP | ${faqs.length} FAQ | ` +
+      `${promotions.length} KM | ${categories.length} DM | ${policies.length} CS`
+    );
+    return true;
+
+  } catch (err) {
+    console.error('[Sheets] ❌ Lỗi load:', err.message);
+    return false;
+  }
+}
+
+// Khởi tạo data: Sheets trước, fallback JSON nếu lỗi
+async function initData() {
+  const ok = await loadDataFromSheets();
+  if (!ok) {
+    console.warn('[Data] ⚠️ Dùng file JSON làm fallback...');
+    try {
+      products   = require('./data/products.json');
+      faqs       = require('./data/faq.json');
+      promotions = require('./data/promotions.json');
+      categories = require('./data/categories.json');
+      policies   = require('./data/policies.json');
+      lastLoaded = new Date();
+      console.log('[Data] ✅ Đã load từ JSON fallback.');
+    } catch (e) {
+      console.error('[Data] ❌ Không load được JSON fallback:', e.message);
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
 // CÁC HÀM RAG — TÌM KIẾM DATA
 // ══════════════════════════════════════════════════════════════
 
-// Chuẩn hóa text: bỏ dấu, lowercase — giúp tìm kiếm không phân biệt dấu
 function normalize(text) {
   return (text || '').toLowerCase()
     .normalize('NFD')
@@ -73,7 +222,6 @@ function normalize(text) {
     .replace(/Đ/g, 'D');
 }
 
-// Tìm FAQ — trả lời tức thì, KHÔNG gọi Claude
 function findFAQ(message) {
   const msg = normalize(message);
   return faqs.find(faq =>
@@ -81,47 +229,35 @@ function findFAQ(message) {
   ) || null;
 }
 
-// Tìm CTKM
 function findPromotion(message) {
   const msg = ' ' + normalize(message) + ' ';
-
-  // Bước 1: Phải có từ kích hoạt KM
   const triggerWords = ['khuyen mai', 'uu dai', 'giam gia', 'tang', 'combo', ' km ', 'sale', 'chuong trinh'];
   if (!triggerWords.some(w => msg.includes(normalize(w)))) return null;
 
-  // Bước 2: Tìm KM theo TÊN SẢN PHẨM khách hỏi — không dùng keywords KM
   const productMatches = promotions.filter(p => {
     if (!p.active) return false;
     const productName = ' ' + normalize(p.product) + ' ';
-    const title = ' ' + normalize(p.title) + ' ';
-
-    // Lấy các từ quan trọng trong câu hỏi (bỏ stop words)
-    const stopWords = ['co', 'khong', 'gi', 'nao', 'cua', 'la', 'va', 'the', 'dang', 'nha', 'ban', 'cho', 'toi', 'minh', 'voi', 'duoc', 'khuyen', 'mai', 'uu', 'dai', 'giam', 'gia', 'chuong', 'trinh', 'sale', 'km'];
-    const queryWords = msg.trim().split(/\s+/)
-      .filter(w => w.length > 2 && !stopWords.includes(w));
-
-    // Khớp từ sản phẩm với câu hỏi
+    const title       = ' ' + normalize(p.title)   + ' ';
+    const stopWords   = ['co','khong','gi','nao','cua','la','va','the','dang','nha','ban','cho',
+                         'toi','minh','voi','duoc','khuyen','mai','uu','dai','giam','gia',
+                         'chuong','trinh','sale','km'];
+    const queryWords  = msg.trim().split(/\s+/).filter(w => w.length > 2 && !stopWords.includes(w));
     return queryWords.some(w =>
-      productName.includes(' ' + w + ' ') ||
-      title.includes(' ' + w + ' ')
+      productName.includes(' ' + w + ' ') || title.includes(' ' + w + ' ')
     );
   });
 
-  // Bước 3: Nếu không tìm được theo sản phẩm cụ thể → trả về tất cả KM đang active
   if (productMatches.length > 0) return productMatches.slice(0, 2);
-
-  // Khách hỏi chung chung "có KM gì không" → trả về tất cả
   return promotions.filter(p => p.active).slice(0, 10);
 }
 
-// Phát hiện ý định câu hỏi (intent)
 function detectIntent(message) {
   const msg = ' ' + normalize(message) + ' ';
   const map = {
-    order:     [' dat hang ', ' order ', ' can mua ', ' muon mua ', ' dat truoc '],
+    order:     [' dat hang ',' order ',' can mua ',' muon mua ',' dat truoc '],
     complaint: [' chan ',' that vong '],
-    price:     [' gia bao nhieu ', ' bao tien ', ' cost ', ' phi van chuyen '],
-    stock:     [' con hang khong ', ' het hang ', ' con san pham khong '],
+    price:     [' gia bao nhieu ',' bao tien ',' cost ',' phi van chuyen '],
+    stock:     [' con hang khong ',' het hang ',' con san pham khong '],
   };
   for (const [intent, keys] of Object.entries(map)) {
     if (keys.some(k => msg.includes(k))) return intent;
@@ -129,21 +265,20 @@ function detectIntent(message) {
   return 'general';
 }
 
-// Tìm sản phẩm liên quan theo keyword — cho điểm và sắp xếp
 function findRelatedProducts(message, max = 4) {
   const msg = normalize(message);
   return products
     .map(p => {
       let score = 0;
-      if (normalize(p.name).includes(msg))          score += 10;
-      if (normalize(p.brand || '').includes(msg))   score += 6;
+      if (normalize(p.name).includes(msg))               score += 10;
+      if (normalize(p.brand || '').includes(msg))        score += 6;
       if (normalize(p.categoryName || '').includes(msg)) score += 3;
       p.keywords.forEach(kw => {
-        if (msg.includes(normalize(kw)))             score += 4;
-        if (normalize(kw).includes(msg))             score += 1;
+        if (msg.includes(normalize(kw))) score += 4;
+        if (normalize(kw).includes(msg)) score += 1;
       });
       (p.tags || []).forEach(tag => {
-        if (msg.includes(normalize(tag)))            score += 2;
+        if (msg.includes(normalize(tag))) score += 2;
       });
       return { ...p, score };
     })
@@ -152,7 +287,6 @@ function findRelatedProducts(message, max = 4) {
     .slice(0, max);
 }
 
-// Tìm theo danh mục nếu không tìm được theo keyword
 function findByCategory(message) {
   const msg = normalize(message);
   const cat = categories.find(c =>
@@ -160,12 +294,9 @@ function findByCategory(message) {
     c.keywords.some(kw => msg.includes(normalize(kw)))
   );
   if (!cat) return [];
-  return products
-    .filter(p => p.category === cat.id && p.inStock !== false)
-    .slice(0, 5);
+  return products.filter(p => p.category === cat.id && p.inStock !== false).slice(0, 5);
 }
 
-// Tạo context sản phẩm ngắn gọn để ghép vào prompt
 function buildProductContext(related) {
   if (!related.length) return '';
   const list = related.map(p => {
@@ -178,7 +309,6 @@ function buildProductContext(related) {
   return `\n\nSản phẩm liên quan:\n${list}`;
 }
 
-// Lấy context chính sách theo intent
 function buildPolicyContext(intent) {
   const pol = policies.find(p => p.intent === intent);
   return pol ? `\n\nLưu ý: ${pol.content}` : '';
@@ -188,8 +318,6 @@ function buildPolicyContext(intent) {
 // ZALO TOKEN MANAGEMENT
 // ══════════════════════════════════════════════════════════════
 
-// Kiểm tra access_token hiện tại còn sống không
-// → tránh tiêu thụ refresh_token khi không cần thiết
 async function checkAccessToken() {
   if (!zaloAccessToken) return false;
   try {
@@ -205,7 +333,6 @@ async function checkAccessToken() {
   }
 }
 
-// Khởi động: chỉ refresh nếu access_token thực sự hết hạn
 async function initToken() {
   const stillValid = await checkAccessToken();
   if (stillValid) {
@@ -225,7 +352,6 @@ async function refreshZaloToken() {
     console.warn('[Token] Thiếu ZALO_APP_ID hoặc ZALO_APP_SECRET — bỏ qua refresh');
     return false;
   }
-
   try {
     console.log('[Token] Đang refresh Zalo access token...');
     const params = new URLSearchParams();
@@ -236,86 +362,50 @@ async function refreshZaloToken() {
     const res = await axios.post(
       'https://oauth.zaloapp.com/v4/oa/access_token',
       params.toString(),
-      {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'secret_key':   process.env.ZALO_APP_SECRET
-        }
-      }
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'secret_key': process.env.ZALO_APP_SECRET } }
     );
 
     if (res.data.access_token) {
       zaloAccessToken  = res.data.access_token;
       zaloRefreshToken = res.data.refresh_token || zaloRefreshToken;
-
-      // In rõ token mới ra log để dễ copy khi cần
       console.log('════════════════════════════════════════');
       console.log('[Token] ✅ REFRESH THÀNH CÔNG!');
       console.log('[Token] ACCESS_TOKEN  mới:', zaloAccessToken);
       console.log('[Token] REFRESH_TOKEN mới:', zaloRefreshToken);
       console.log('[Token] Hãy copy 2 giá trị trên vào Railway env nếu cần!');
       console.log('════════════════════════════════════════');
-
-      // Cập nhật lên Railway env nếu có config
       await updateRailwayEnvToken(zaloRefreshToken);
       return true;
     }
-
     console.error('[Token] Refresh thất bại — phản hồi:', JSON.stringify(res.data));
     return false;
   } catch (err) {
     console.error('[Token] Lỗi khi refresh:', err.message);
-    if (err.response) {
-      console.error('[Token] Chi tiết lỗi:', JSON.stringify(err.response.data));
-    }
+    if (err.response) console.error('[Token] Chi tiết:', JSON.stringify(err.response.data));
     return false;
   }
 }
 
-// Cập nhật ZALO_REFRESH_TOKEN lên Railway env để tồn tại qua restart
 async function updateRailwayEnvToken(newRefreshToken) {
-  const apiToken     = process.env.RAILWAY_API_TOKEN;
-  const projectId    = process.env.RAILWAY_PROJECT_ID;
-  const serviceId    = process.env.RAILWAY_SERVICE_ID;
+  const apiToken      = process.env.RAILWAY_API_TOKEN;
+  const projectId     = process.env.RAILWAY_PROJECT_ID;
+  const serviceId     = process.env.RAILWAY_SERVICE_ID;
   const environmentId = process.env.RAILWAY_ENVIRONMENT_ID;
-
   if (!apiToken || !projectId || !serviceId || !environmentId) {
     console.log('[Railway] Bỏ qua cập nhật Railway env (thiếu RAILWAY_* config)');
     return;
   }
-
   try {
     const res = await axios.post(
       'https://backboard.railway.app/graphql/v2',
       {
-        query: `
-          mutation variableUpsert($input: VariableUpsertInput!) {
-            variableUpsert(input: $input)
-          }
-        `,
-        variables: {
-          input: {
-            projectId,
-            environmentId,
-            serviceId,
-            name:  'ZALO_REFRESH_TOKEN',
-            value: newRefreshToken
-          }
-        }
+        query: `mutation variableUpsert($input: VariableUpsertInput!) { variableUpsert(input: $input) }`,
+        variables: { input: { projectId, environmentId, serviceId, name: 'ZALO_REFRESH_TOKEN', value: newRefreshToken } }
       },
-      {
-        headers: {
-          'Authorization': `Bearer ${apiToken}`,
-          'Content-Type':  'application/json'
-        }
-      }
+      { headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' } }
     );
-
-    if (res.data.errors) {
-      console.error('[Railway] Lỗi GraphQL:', JSON.stringify(res.data.errors));
-    } else {
-      console.log('[Railway] Đã cập nhật ZALO_REFRESH_TOKEN thành công.');
-    }
+    if (res.data.errors) console.error('[Railway] Lỗi GraphQL:', JSON.stringify(res.data.errors));
+    else console.log('[Railway] Đã cập nhật ZALO_REFRESH_TOKEN thành công.');
   } catch (err) {
     console.error('[Railway] Lỗi cập nhật env:', err.message);
   }
@@ -327,58 +417,68 @@ async function updateRailwayEnvToken(newRefreshToken) {
 
 app.get('/', (req, res) => res.sendStatus(200));
 
-// ── ADMIN: Kiểm tra trạng thái token ──────────────────────────
-// GET /admin/token-status?secret=<ADMIN_SECRET>
-app.get('/admin/token-status', (req, res) => {
+// ── ADMIN: Reload data từ Google Sheets ───────────────────────
+app.get('/admin/reload-data', async (req, res) => {
+  const secret = process.env.ADMIN_SECRET || 'hasu2024';
+  if (req.query.secret !== secret) return res.status(403).json({ error: 'Forbidden' });
+
+  const ok = await loadDataFromSheets();
+  res.json({
+    success: ok,
+    message: ok ? 'Đã reload data từ Google Sheets thành công!' : 'Reload thất bại, xem log.',
+    stats: { products: products.length, faqs: faqs.length, promotions: promotions.length,
+             categories: categories.length, policies: policies.length },
+    lastLoaded
+  });
+});
+
+// ── ADMIN: Xem trạng thái tổng quan ──────────────────────────
+app.get('/admin/status', (req, res) => {
   const secret = process.env.ADMIN_SECRET || 'hasu2024';
   if (req.query.secret !== secret) return res.status(403).json({ error: 'Forbidden' });
 
   res.json({
-    access_token_length:  zaloAccessToken.length,
-    refresh_token_length: zaloRefreshToken.length,
-    access_token_preview: zaloAccessToken.slice(0, 20) + '...',
+    data: { products: products.length, faqs: faqs.length, promotions: promotions.length,
+            categories: categories.length, policies: policies.length },
+    lastLoaded,
+    token: {
+      access_token_preview:  zaloAccessToken.slice(0, 20)  + '...',
+      refresh_token_preview: zaloRefreshToken.slice(0, 20) + '...'
+    }
+  });
+});
+
+// ── ADMIN: Token management ───────────────────────────────────
+app.get('/admin/token-status', (req, res) => {
+  const secret = process.env.ADMIN_SECRET || 'hasu2024';
+  if (req.query.secret !== secret) return res.status(403).json({ error: 'Forbidden' });
+  res.json({
+    access_token_preview:  zaloAccessToken.slice(0, 20)  + '...',
     refresh_token_preview: zaloRefreshToken.slice(0, 20) + '...',
     timestamp: new Date().toISOString()
   });
 });
 
-// ── ADMIN: Cập nhật token thủ công không cần redeploy ─────────
-// POST /admin/set-token?secret=<ADMIN_SECRET>
-// Body: { "access_token": "...", "refresh_token": "..." }
 app.post('/admin/set-token', (req, res) => {
   const secret = process.env.ADMIN_SECRET || 'hasu2024';
   if (req.query.secret !== secret) return res.status(403).json({ error: 'Forbidden' });
-
   const { access_token, refresh_token } = req.body;
-  if (!access_token && !refresh_token) {
+  if (!access_token && !refresh_token)
     return res.status(400).json({ error: 'Cần ít nhất access_token hoặc refresh_token' });
-  }
-
-  if (access_token)  { zaloAccessToken  = access_token;  }
-  if (refresh_token) { zaloRefreshToken = refresh_token; }
-
+  if (access_token)  zaloAccessToken  = access_token;
+  if (refresh_token) zaloRefreshToken = refresh_token;
   console.log('[Admin] Token đã được cập nhật thủ công.');
-  console.log('[Admin] ACCESS_TOKEN  mới:', zaloAccessToken.slice(0, 30) + '...');
-  console.log('[Admin] REFRESH_TOKEN mới:', zaloRefreshToken.slice(0, 30) + '...');
-
   res.json({ success: true, message: 'Token đã cập nhật thành công!' });
 });
 
-// ── ADMIN: Trigger refresh thủ công ───────────────────────────
-// GET /admin/refresh-now?secret=<ADMIN_SECRET>
 app.get('/admin/refresh-now', async (req, res) => {
   const secret = process.env.ADMIN_SECRET || 'hasu2024';
   if (req.query.secret !== secret) return res.status(403).json({ error: 'Forbidden' });
-
   const ok = await refreshZaloToken();
-  if (ok) {
-    res.json({ success: true, message: 'Refresh thành công! Xem log để lấy token mới.' });
-  } else {
-    res.json({ success: false, message: 'Refresh thất bại. Xem log để biết chi tiết.' });
-  }
+  res.json({ success: ok, message: ok ? 'Refresh thành công!' : 'Refresh thất bại. Xem log.' });
 });
 
-// Thay bằng mã xác thực domain Zalo của anh/chị
+// ── ZALO DOMAIN VERIFY ────────────────────────────────────────
 app.get('/zalo_verifierNSAS0jpJA3iEtwmmZT0-A7djgp-LctvYCJCt.html', (req, res) => {
   res.setHeader('Content-Type', 'text/html');
   res.send('<html><body>zalo_verifierNSAS0jpJA3iEtwmmZT0-A7djgp-LctvYCJCt</body></html>');
@@ -386,11 +486,9 @@ app.get('/zalo_verifierNSAS0jpJA3iEtwmmZT0-A7djgp-LctvYCJCt.html', (req, res) =>
 
 // ── WEBHOOK CHÍNH ─────────────────────────────────────────────
 app.post('/webhook', async (req, res) => {
-  res.sendStatus(200); // Trả lời Zalo NGAY TRƯỚC KHI xử lý
-
+  res.sendStatus(200);
   const event = req.body;
 
-  // Chào khách mới quan tâm OA
   if (event.event_name === 'follow') {
     const uid = event.follower?.id;
     if (uid) await sendZaloMessage(uid,
@@ -407,7 +505,6 @@ app.post('/webhook', async (req, res) => {
   const message = event.message.text;
   console.log(`[${new Date().toLocaleTimeString('vi-VN')}] Khách: ${message}`);
 
-  // LỚP 1: FAQ — Trả lời ngay, không tốn token
   const faqHit = findFAQ(message);
   if (faqHit) {
     await sendZaloMessage(userId, faqHit.answer);
@@ -415,7 +512,6 @@ app.post('/webhook', async (req, res) => {
     return;
   }
 
-  // Kiểm tra khuyến mãi
   const promos = findPromotion(message);
   if (promos && promos.length > 0) {
     const promoText = promos.map(p =>
@@ -427,10 +523,7 @@ app.post('/webhook', async (req, res) => {
     return;
   }
 
-  // LỚP 2: Phát hiện intent
   const intent = detectIntent(message);
-
-  // Khiếu nại → chuyển người ngay
   if (intent === 'complaint') {
     await sendZaloMessage(userId,
       'Em rất tiếc về trải nghiệm của anh/chị! 😔\n' +
@@ -440,18 +533,14 @@ app.post('/webhook', async (req, res) => {
     return;
   }
 
-  // LỚP 3: Tìm sản phẩm liên quan (RAG)
   let related = findRelatedProducts(message);
   if (!related.length) related = findByCategory(message);
 
   const context = buildProductContext(related) + buildPolicyContext(intent);
 
-  // LỚP 4: Gọi Claude với context nhỏ gọn
   if (!histories[userId]) histories[userId] = [];
   histories[userId].push({ role: 'user', content: message });
-  if (histories[userId].length > 20) {
-    histories[userId] = histories[userId].slice(-20);
-  }
+  if (histories[userId].length > 20) histories[userId] = histories[userId].slice(-20);
 
   const reply = await callClaude(userId, context);
   histories[userId].push({ role: 'assistant', content: reply });
@@ -466,24 +555,14 @@ async function callClaude(userId, additionalContext = '') {
   try {
     const response = await axios.post(
       'https://api.anthropic.com/v1/messages',
-      {
-        model:      'claude-haiku-4-5',
-        max_tokens: 300,
-        system:     BASE_PROMPT + additionalContext,
-        messages:   histories[userId]
-      },
-      {
-        headers: {
-          'x-api-key':         process.env.ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-          'content-type':      'application/json'
-        }
-      }
+      { model: 'claude-haiku-4-5', max_tokens: 300,
+        system: BASE_PROMPT + additionalContext, messages: histories[userId] },
+      { headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY,
+                   'anthropic-version': '2023-06-01', 'content-type': 'application/json' } }
     );
     return response.data.content[0].text;
   } catch (err) {
     console.error('Claude lỗi:', err.message);
-    console.error('Chi tiết:', JSON.stringify(err.response?.data));
     return 'Xin lỗi anh/chị, em đang gặp sự cố kỹ thuật. Vui lòng nhắn lại sau nhé!';
   }
 }
@@ -495,22 +574,14 @@ async function sendZaloMessage(userId, text) {
   const doSend = (token) => axios.post(
     'https://openapi.zalo.me/v3.0/oa/message/cs',
     { recipient: { user_id: userId }, message: { text } },
-    {
-      headers: {
-        'access_token': token,
-        'Content-Type': 'application/json'
-      }
-    }
+    { headers: { 'access_token': token, 'Content-Type': 'application/json' } }
   );
-
   try {
     const res = await doSend(zaloAccessToken);
     console.log('Zalo OK:', JSON.stringify(res.data));
   } catch (err) {
-    const errCode = err.response?.data?.error;
+    const errCode   = err.response?.data?.error;
     const httpStatus = err.response?.status;
-
-    // Token hết hạn (Zalo trả error -216 hoặc HTTP 401)
     if (errCode === -216 || httpStatus === 401) {
       console.warn('[Token] Access token hết hạn — đang tự động refresh...');
       const ok = await refreshZaloToken();
@@ -519,8 +590,7 @@ async function sendZaloMessage(userId, text) {
           const res2 = await doSend(zaloAccessToken);
           console.log('Zalo OK (sau refresh):', JSON.stringify(res2.data));
         } catch (err2) {
-          console.error('Zalo lỗi sau khi refresh:', err2.message);
-          console.error('Chi tiết:', JSON.stringify(err2.response?.data));
+          console.error('Zalo lỗi sau refresh:', err2.message);
         }
       } else {
         console.error('[Token] Refresh thất bại — không thể gửi tin nhắn.');
@@ -533,22 +603,30 @@ async function sendZaloMessage(userId, text) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// KHỞI ĐỘNG SERVER + AUTO-REFRESH TOKEN
+// KHỞI ĐỘNG SERVER
 // ══════════════════════════════════════════════════════════════
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`Server chạy tại cổng ${PORT}`);
 
-  // Kiểm tra token trước — chỉ refresh nếu thực sự hết hạn
-  // Tránh tiêu thụ refresh_token không cần thiết mỗi lần restart
+  // Load data từ Google Sheets (fallback JSON)
+  await initData();
+
+  // Tự động reload data mỗi 30 phút
+  setInterval(async () => {
+    console.log('[Sheets] ⏰ Tự động reload data...');
+    await loadDataFromSheets();
+  }, 30 * 60 * 1000);
+  console.log('[Sheets] Lịch reload: mỗi 30 phút.');
+
+  // Kiểm tra và refresh Zalo token
   await initToken();
 
-  // Lên lịch kiểm tra và refresh mỗi 20 giờ
+  // Lên lịch kiểm tra token mỗi 20 giờ
   setInterval(async () => {
     const stillValid = await checkAccessToken();
     if (!stillValid) await refreshZaloToken();
     else console.log('[Token] Định kỳ 20h: token còn tốt, bỏ qua refresh.');
   }, 20 * 60 * 60 * 1000);
-
   console.log('[Token] Lịch kiểm tra: mỗi 20 giờ.');
 });
