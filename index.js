@@ -591,25 +591,34 @@ async function sendZaloMessage(userId, text) {
     { recipient: { user_id: userId }, message: { text } },
     { headers: { 'access_token': token, 'Content-Type': 'application/json' } }
   );
+  const tryRefreshAndResend = async () => {
+    console.warn('[Token] Access token hết hạn — đang tự động refresh...');
+    const ok = await refreshZaloToken();
+    if (ok) {
+      try {
+        const res2 = await doSend(zaloAccessToken);
+        console.log('Zalo OK (sau refresh):', JSON.stringify(res2.data));
+      } catch (err2) {
+        console.error('Zalo lỗi sau refresh:', err2.message);
+      }
+    } else {
+      console.error('[Token] Refresh thất bại — không thể gửi tin nhắn.');
+    }
+  };
+
   try {
     const res = await doSend(zaloAccessToken);
-    console.log('Zalo OK:', JSON.stringify(res.data));
+    // Zalo trả HTTP 200 ngay cả khi token hết hạn — phải kiểm tra body
+    if (res.data?.error === -216) {
+      await tryRefreshAndResend();
+    } else {
+      console.log('Zalo OK:', JSON.stringify(res.data));
+    }
   } catch (err) {
-    const errCode   = err.response?.data?.error;
+    const errCode    = err.response?.data?.error;
     const httpStatus = err.response?.status;
     if (errCode === -216 || httpStatus === 401) {
-      console.warn('[Token] Access token hết hạn — đang tự động refresh...');
-      const ok = await refreshZaloToken();
-      if (ok) {
-        try {
-          const res2 = await doSend(zaloAccessToken);
-          console.log('Zalo OK (sau refresh):', JSON.stringify(res2.data));
-        } catch (err2) {
-          console.error('Zalo lỗi sau refresh:', err2.message);
-        }
-      } else {
-        console.error('[Token] Refresh thất bại — không thể gửi tin nhắn.');
-      }
+      await tryRefreshAndResend();
     } else {
       console.error('Zalo lỗi:', err.message);
       console.error('Chi tiết:', JSON.stringify(err.response?.data));
