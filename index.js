@@ -11,7 +11,6 @@ const axios      = require('axios');
 const { google } = require('googleapis');
 const app        = express();
 app.use(express.json());
-app.use(express.static('public'));
 
 // ── DỮ LIỆU IN-MEMORY (đọc từ Google Sheets, fallback JSON) ──
 let products   = [];
@@ -227,6 +226,20 @@ async function initData() {
 // CÁC HÀM RAG — TÌM KIẾM DATA
 // ══════════════════════════════════════════════════════════════
 
+// ══════════════════════════════════════════════════════════════
+// KHUNG GIỜ HOẠT ĐỘNG
+// BOT_START_HOUR / BOT_END_HOUR cấu hình trong Railway env
+// Mặc định: bot hoạt động 22h-8h, nhân viên trực 8h-22h
+// ══════════════════════════════════════════════════════════════
+function isBotActive() {
+  const vnHour = (new Date().getUTCHours() + 7) % 24;
+  const start  = parseInt(process.env.BOT_START_HOUR || '22', 10);
+  const end    = parseInt(process.env.BOT_END_HOUR   || '8',  10);
+  // Nếu start > end thì khung giờ vắt qua nửa đêm (vd: 22-8)
+  if (start > end) return vnHour >= start || vnHour < end;
+  return vnHour >= start && vnHour < end;
+}
+
 function normalize(text) {
   return (text || '').toLowerCase()
     .normalize('NFD')
@@ -235,15 +248,14 @@ function normalize(text) {
     .replace(/Đ/g, 'D');
 }
 
-function findFAQ(message) {
-  const msg = normalize(message);
+function findFAQ(msgNorm) {
   return faqs.find(faq =>
-    faq.keywords.some(kw => msg.includes(normalize(kw)))
+    faq.keywords.some(kw => msgNorm.includes(normalize(kw)))
   ) || null;
 }
 
-function findPromotion(message) {
-  const msg = ' ' + normalize(message) + ' ';
+function findPromotion(msgNorm) {
+  const msg = ' ' + msgNorm + ' ';
   const triggerWords = ['khuyen mai', 'uu dai', 'giam gia', 'tang', 'combo', ' km ', 'sale', 'chuong trinh'];
   if (!triggerWords.some(w => msg.includes(normalize(w)))) return null;
 
@@ -264,8 +276,8 @@ function findPromotion(message) {
   return promotions.filter(p => p.active).slice(0, 10);
 }
 
-function detectIntent(message) {
-  const msg = ' ' + normalize(message) + ' ';
+function detectIntent(msgNorm) {
+  const msg = ' ' + msgNorm + ' ';
   const map = {
     order:     [' dat hang ',' order ',' can mua ',' muon mua ',' dat truoc '],
     complaint: [' chan ',' that vong '],
@@ -278,8 +290,8 @@ function detectIntent(message) {
   return 'general';
 }
 
-function findRelatedProducts(message, max = 4) {
-  const msg = normalize(message);
+function findRelatedProducts(msgNorm, max = 4) {
+  const msg = msgNorm;
   return products
     .map(p => {
       let score = 0;
@@ -300,8 +312,8 @@ function findRelatedProducts(message, max = 4) {
     .slice(0, max);
 }
 
-function findByCategory(message) {
-  const msg = normalize(message);
+function findByCategory(msgNorm) {
+  const msg = msgNorm;
   const cat = categories.find(c =>
     normalize(c.name).includes(msg) ||
     c.keywords.some(kw => msg.includes(normalize(kw)))
@@ -316,7 +328,6 @@ function buildProductContext(related) {
     let line = `- ${p.name}: ${p.price.toLocaleString('vi-VN')}đ/${p.unit || 'cái'}`;
     if (p.description) line += ` — ${p.description}`;
     if (p.inStock === false) line += ' [HẾT HÀNG]';
-    if (p.variants?.length > 1) line += ` (có: ${p.variants.join(', ')})`;
     if (p.link) line += ` | 🛒 ${p.link}`;
     return line;
   }).join('\n');
@@ -388,7 +399,7 @@ async function refreshZaloToken() {
       console.log('[Token] REFRESH_TOKEN mới:', zaloRefreshToken);
       console.log('[Token] Hãy copy 2 giá trị trên vào Railway env nếu cần!');
       console.log('════════════════════════════════════════');
-      await updateRailwayEnvToken(zaloRefreshToken);
+      await updateRailwayEnvToken(zaloAccessToken, zaloRefreshToken);
       return true;
     }
     console.error('[Token] Refresh thất bại — phản hồi:', JSON.stringify(res.data));
@@ -400,7 +411,7 @@ async function refreshZaloToken() {
   }
 }
 
-async function updateRailwayEnvToken(newRefreshToken) {
+async function updateRailwayEnvToken(newAccessToken, newRefreshToken) {
   const apiToken      = process.env.RAILWAY_API_TOKEN;
   const projectId     = process.env.RAILWAY_PROJECT_ID;
   const serviceId     = process.env.RAILWAY_SERVICE_ID;
@@ -409,17 +420,22 @@ async function updateRailwayEnvToken(newRefreshToken) {
     console.log('[Railway] Bỏ qua cập nhật Railway env (thiếu RAILWAY_* config)');
     return;
   }
-  try {
+  const upsert = async (name, value) => {
     const res = await axios.post(
       'https://backboard.railway.app/graphql/v2',
       {
         query: `mutation variableUpsert($input: VariableUpsertInput!) { variableUpsert(input: $input) }`,
-        variables: { input: { projectId, environmentId, serviceId, name: 'ZALO_REFRESH_TOKEN', value: newRefreshToken } }
+        variables: { input: { projectId, environmentId, serviceId, name, value } }
       },
       { headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' } }
     );
-    if (res.data.errors) console.error('[Railway] Lỗi GraphQL:', JSON.stringify(res.data.errors));
-    else console.log('[Railway] Đã cập nhật ZALO_REFRESH_TOKEN thành công.');
+    if (res.data.errors) throw new Error(JSON.stringify(res.data.errors));
+  };
+  try {
+    // Lưu cả 2 token — khi Railway redeploy sẽ đọc access_token còn hạn, không refresh lại
+    await upsert('ZALO_ACCESS_TOKEN',  newAccessToken);
+    await upsert('ZALO_REFRESH_TOKEN', newRefreshToken);
+    console.log('[Railway] Đã cập nhật ZALO_ACCESS_TOKEN + ZALO_REFRESH_TOKEN thành công.');
   } catch (err) {
     console.error('[Railway] Lỗi cập nhật env:', err.message);
   }
@@ -513,20 +529,33 @@ app.post('/webhook', async (req, res) => {
     return;
   }
 
+  if (event.event_name === 'user_send_sticker') {
+    if (!isBotActive()) return;
+    const uid = event.sender?.id;
+    if (uid) await sendZaloMessage(uid,
+      'Chào anh/chị! Em là trợ lý của Bách hóa số Hasu.\n' +
+      'Anh/chị cần tư vấn sản phẩm hay đặt hàng gì không ạ? 😊'
+    );
+    return;
+  }
   if (event.event_name !== 'user_send_text') return;
+
+  // Trong giờ nhân viên trực → im lặng, để nhân viên tự xử lý
+  if (!isBotActive()) return;
 
   const userId  = event.sender.id;
   const message = event.message.text;
+  const msgNorm = normalize(message);
   console.log(`[${new Date().toLocaleTimeString('vi-VN')}] Khách: ${message}`);
 
-  const faqHit = findFAQ(message);
+  const faqHit = findFAQ(msgNorm);
   if (faqHit) {
     await sendZaloMessage(userId, faqHit.answer);
     console.log('[FAQ hit] Không gọi Claude');
     return;
   }
 
-  const promos = findPromotion(message);
+  const promos = findPromotion(msgNorm);
   if (promos && promos.length > 0) {
     const promoText = promos.map(p =>
       `🎁 ${p.title}\n💰 Giá: ${p.price_sale.toLocaleString('vi-VN')}đ` +
@@ -538,7 +567,7 @@ app.post('/webhook', async (req, res) => {
     return;
   }
 
-  const intent = detectIntent(message);
+  const intent = detectIntent(msgNorm);
   if (intent === 'complaint') {
     await sendZaloMessage(userId,
       'Em rất tiếc về trải nghiệm của anh/chị! 😔\n' +
@@ -548,17 +577,18 @@ app.post('/webhook', async (req, res) => {
     return;
   }
 
-  let related = findRelatedProducts(message);
-  if (!related.length) related = findByCategory(message);
+  let related = findRelatedProducts(msgNorm);
+  if (!related.length) related = findByCategory(msgNorm);
 
   const context = buildProductContext(related) + buildPolicyContext(intent);
 
-  if (!histories[userId]) histories[userId] = [];
-  histories[userId].push({ role: 'user', content: message });
-  if (histories[userId].length > 20) histories[userId] = histories[userId].slice(-20);
+  if (!histories[userId]) histories[userId] = { msgs: [], ts: Date.now() };
+  histories[userId].ts = Date.now();
+  histories[userId].msgs.push({ role: 'user', content: message });
+  if (histories[userId].msgs.length > 20) histories[userId].msgs = histories[userId].msgs.slice(-20);
 
   const reply = await callClaude(userId, context);
-  histories[userId].push({ role: 'assistant', content: reply });
+  histories[userId].msgs.push({ role: 'assistant', content: reply });
   await sendZaloMessage(userId, reply);
   console.log(`[Bot] → ${reply.substring(0, 80)}`);
 });
@@ -571,7 +601,7 @@ async function callClaude(userId, additionalContext = '') {
     const response = await axios.post(
       'https://api.anthropic.com/v1/messages',
       { model: 'claude-haiku-4-5', max_tokens: 300,
-        system: BASE_PROMPT + additionalContext, messages: histories[userId] },
+        system: BASE_PROMPT + additionalContext, messages: histories[userId].msgs },
       { headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY,
                    'anthropic-version': '2023-06-01', 'content-type': 'application/json' } }
     );
@@ -653,4 +683,15 @@ app.listen(PORT, async () => {
     else console.log('[Token] Định kỳ 20h: token còn tốt, bỏ qua refresh.');
   }, 20 * 60 * 60 * 1000);
   console.log('[Token] Lịch kiểm tra: mỗi 20 giờ.');
+
+  // Dọn histories không hoạt động > 24h để tránh memory leak
+  setInterval(() => {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    let removed = 0;
+    for (const uid of Object.keys(histories)) {
+      if (histories[uid].ts < cutoff) { delete histories[uid]; removed++; }
+    }
+    if (removed > 0) console.log(`[History] Đã xóa ${removed} session hết hạn.`);
+  }, 60 * 60 * 1000);
+  console.log('[History] Lịch dọn session: mỗi 1 giờ.');
 });
